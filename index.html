@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10m Electronic Target - GitHub Version</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 0; background-color: #f7f9fa; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .app-container { display: flex; width: 100vw; height: 100vh; background-color: #ffffff; }
+        
+        /* ฝั่งซ้าย: แบบจำลองเป้า */
+        .left-panel { flex: 1.2; display: flex; flex-direction: column; justify-content: center; align-items: center; background-color: #ffffff; padding: 20px; position: relative; border-right: 2px solid #e1e8ed; }
+        #targetCanvas { max-width: 90%; max-height: 85%; aspect-ratio: 1/1; background-color: #fff; cursor: crosshair; }
+        .instruction-tip { margin-top: 10px; font-size: 14px; color: #7f8c8d; font-weight: bold; }
+
+        /* ฝั่งขวา: คะแนน */
+        .right-panel { flex: 0.8; display: flex; flex-direction: column; background-color: #ffffff; border-left: 1px solid #e1e8ed; }
+        .score-section { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; border-bottom: 2px solid #e1e8ed; padding: 15px; position: relative; }
+        .score-title { font-size: 28px; font-weight: 800; color: #1c2434; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
+        .score-display { font-size: 85px; font-weight: 800; color: #e74c3c; line-height: 1; margin-top: 5px; }
+        .btn-reset { position: absolute; top: 15px; right: 20px; background-color: #ff0000; color: white; border: none; padding: 10px 22px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; text-transform: uppercase; }
+        .btn-reset:hover { background-color: #cc0000; }
+        
+        .total-section { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; border-bottom: 2px solid #e1e8ed; padding: 15px; background-color: #fafbfc; }
+        .total-title { font-size: 28px; font-weight: 800; font-style: italic; color: #1c2434; margin: 0; }
+        .total-display { font-size: 75px; font-weight: 800; color: #f39c12; line-height: 1; margin-top: 5px; }
+        
+        .history-section { flex: 1.8; padding: 20px; display: flex; flex-direction: column; background-color: #ffffff; }
+        .history-title { font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0 0 12px 0; text-align: center; text-decoration: underline; text-underline-offset: 4px; }
+        .history-table-container { flex: 1; overflow-y: auto; }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 19px; text-align: center; }
+        .history-table th { font-weight: 600; color: #7f8c8d; padding-bottom: 8px; font-size: 15px; }
+        .history-table td { padding: 7px 5px; font-weight: 700; color: #2c3e50; width: 16.6%; }
+        .arrow-indicator { color: #2ecc71; font-size: 18px; margin-left: 4px; display: inline-block; font-weight: 900; }
+        .series-sum { color: #e74c3c; font-size: 21px; font-weight: 800; border-top: 2px solid #e1e8ed; padding-top: 5px; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="left-panel">
+            <canvas id="targetCanvas" width="600" height="600"></canvas>
+            <div class="instruction-tip">💡 คลิกเมาส์บนตัวเป้าเพื่อจำลองการยิงรูกระสุนจริง</div>
+        </div>
+
+        <div class="right-panel">
+            <div class="score-section">
+                <h2 class="score-title">Score</h2>
+                <div class="score-display" id="latestScore">0.0</div>
+                <button class="btn-reset" onclick="resetSystem()">RESET</button>
+            </div>
+            
+            <div class="total-section">
+                <h2 class="total-title">Total Score</h2>
+                <div class="total-display" id="totalScore">0.0</div>
+            </div>
+            
+            <div class="history-section">
+                <h3 class="history-title">History</h3>
+                <div class="history-table-container">
+                    <table class="history-table">
+                        <thead>
+                            <tr id="tableHeader"></tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // เคลื่อนย้ายโครงสร้างฐานข้อมูลมาไว้ในหน่วยความจำเบราว์เซอร์ (JavaScript State)
+        let state = {
+            total_score: 0.0,
+            latest_score: 0.0,
+            shots: [],
+            series_list: [[]]
+        };
+
+        const canvas = document.getElementById('targetCanvas');
+        const ctx = canvas.getContext('2d');
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // วาดเป้าปืน 10 เมตรสากล
+        function drawTarget() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const ringRaddi = [280, 250, 220, 190, 160, 130, 100, 70];
+            const ringLabels = ["1", "2", "3", "4", "5", "6", "7", "8"];
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = "#404040";
+            
+            for(let i=0; i<ringRaddi.length; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, ringRaddi[i], 0, 2 * Math.PI);
+                ctx.stroke();
+                ctx.font = "bold 13px sans-serif";
+                ctx.fillStyle = "#7f8c8d";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(ringLabels[i], centerX, centerY - ringRaddi[i] + 12);
+                ctx.fillText(ringLabels[i], centerX, centerY + ringRaddi[i] - 12);
+                ctx.fillText(ringLabels[i], centerX - ringRaddi[i] + 12, centerY);
+                ctx.fillText(ringLabels[i], centerX + ringRaddi[i] - 12, centerY);
+            }
+
+            ctx.fillStyle = "#111111";
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 40, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.strokeStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 20, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText("9", centerX, centerY - 30);
+            ctx.fillText("9", centerX, centerY + 30);
+            ctx.fillText("9", centerX - 30, centerY);
+            ctx.fillText("9", centerX + 30, centerY);
+
+            // พล็อตจุดกระสุนสีเหลืองและเขียว
+            if (state.shots.length > 0) {
+                for(let i = 0; i < state.shots.length - 1; i++) {
+                    ctx.fillStyle = "rgba(241, 196, 15, 0.9)";
+                    ctx.strokeStyle = "#b7950b";
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(centerX + state.shots[i].x, centerY + state.shots[i].y, 11, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                const latest = state.shots[state.shots.length - 1];
+                ctx.fillStyle = "#00ff00";
+                ctx.strokeStyle = "#00aa00";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(centerX + latest.x, centerY + latest.y, 11, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+
+        // คำนวณทิศทางกระสุนย้ายมาประมวลผลที่หน้าบ้าน
+        function calculateArrow(current_shot, previous_shot) {
+            if (!previous_shot) return "";
+            let dx = current_shot.x - previous_shot.x;
+            let dy = current_shot.y - previous_shot.y;
+            let distance = Math.sqrt(dx*dx + dy*dy);
+            if (distance < 3.0) return ""; // ต่ำกว่า 3 พิกเซล ซ่อนลูกศร
+            
+            let angle = Math.atan2(-dy, dx) * (180 / Math.PI);
+            if (angle < 0) angle += 360;
+            
+            if (22.5 <= angle && angle < 67.5) return "↗";
+            if (67.5 <= angle && angle < 112.5) return "↑";
+            if (112.5 <= angle && angle < 157.5) return "↖";
+            if (157.5 <= angle && angle < 202.5) return "←";
+            if (202.5 <= angle && angle < 247.5) return "↙";
+            if (247.5 <= angle && angle < 292.5) return "↓";
+            if (292.5 <= angle && angle < 337.5) return "↘";
+            return "→";
+        }
+
+        function updateHistoryTable() {
+            const headerRow = document.getElementById('tableHeader');
+            const tableBody = document.getElementById('tableBody');
+            headerRow.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            if (state.series_list[0].length === 0) return;
+            const numSeries = state.series_list.length;
+            
+            for (let s = 0; s < numSeries; s++) {
+                let th = document.createElement('th');
+                th.innerText = `ชุดที่ ${s + 1}`;
+                headerRow.appendChild(th);
+            }
+            
+            for (let rowIdx = 0; rowIdx < 5; rowIdx++) {
+                let tr = document.createElement('tr');
+                for (let colIdx = 0; colIdx < numSeries; colIdx++) {
+                    let td = document.createElement('td');
+                    let shotData = state.series_list[colIdx][rowIdx];
+                    if (shotData) {
+                        let arrowHtml = shotData.arrow ? `<span class="arrow-indicator">${shotData.arrow}</span>` : '';
+                        td.innerHTML = `${shotData.score.toFixed(1)}${arrowHtml}`;
+                    } else {
+                        td.innerText = "0.0";
+                    }
+                    tr.appendChild(td);
+                }
+                tableBody.appendChild(tr);
+            }
+            
+            let totalTr = document.createElement('tr');
+            for (let colIdx = 0; colIdx < numSeries; colIdx++) {
+                let td = document.createElement('td');
+                td.className = "series-sum";
+                let sum = 0.0;
+                state.series_list[colIdx].forEach(shot => { sum += shot.score; });
+                td.innerText = sum > 0 ? sum.toFixed(1) : "0.0";
+                totalTr.appendChild(td);
+            }
+            tableBody.appendChild(totalTr);
+        }
+
+        // ดักจับเหตุการณ์การคลิกเมาส์บนแคนวาสเพื่อรับพิกัดเป้ายิงจริง (เวอร์ชันแก้ไขสูตรคะแนนแม่นยำ 100%)
+        canvas.addEventListener('click', function(event) {
+            const rect = canvas.getBoundingClientRect();
+            
+            // 1. หาตำแหน่งเมาส์ที่คลิกจริงเทียบกับพื้นที่แสดงผลของแคนวาส
+            const clientXWithinCanvas = event.clientX - rect.left;
+            const clientYWithinCanvas = event.clientY - rect.top;
+            
+            // 2. คำนวณอัตราส่วน (Scale Ratio)
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            // 3. แปลงพิกัดการคลิกหน้าจอให้กลายเป็นพิกเซลจริงของแคนวาส
+            const canvasX = clientXWithinCanvas * scaleX;
+            const canvasY = clientYWithinCanvas * scaleY;
+            
+            // 4. คำนวณระยะห่าง (X, Y) ออกมาจากจุดกึ่งกลางแคนวาส (centerX, centerY = 300)
+            const clickX = canvasX - centerX;
+            const clickY = canvasY - centerY;
+            const distance = Math.sqrt(clickX*clickX + clickY*clickY);
+            
+            // 5. [แก้ไขใหม่] คำนวณคะแนนให้แม่นยำตามรัศมีวงแหวนจริง (วงละ 30 พิกเซล)
+            let score_val = 0.0;
+            
+            if (distance <= 20) {
+                // อยู่ในวง 10 ด้านในสุด (คิดคะแนนทศนิยมละเอียด 10.0 - 10.9)
+                score_val = 10.9 - (distance / 20) * 0.9;
+            } else if (distance <= 40) {
+                // อยู่ในวง 9 (คะแนนระหว่าง 9.0 - 9.9)
+                score_val = 9.9 - ((distance - 20) / 20) * 0.9;
+            } else if (distance <= 280) {
+                // อยู่ในวง 8 ลงไปจนถึงวง 1 (ระยะห่างเพิ่มวงละ 30 พิกเซล)
+                // คำนวณหาคะแนนเต็มหลักหน่วยก่อน
+                let base_score = 8 - Math.floor((distance - 40) / 30);
+                // คำนวณคะแนนทศนิยมย่อย (.0 ถึง .9) ตามตำแหน่งที่อยู่ภายในวงนั้นๆ
+                let inner_dist = (distance - 40) % 30;
+                let decimal = 0.9 - (inner_dist / 30) * 0.9;
+                
+                score_val = base_score + decimal;
+            } else {
+                // หลุดนอกวง 1 ได้ 0 คะแนน
+                score_val = 0.0;
+            }
+            
+            // ปัดเศษให้เหลือทศนิยม 1 ตำแหน่ง
+            score_val = Math.max(0.0, roundScore(score_val));
+            if (score_val > 10.9) score_val = 10.9;
+
+            // บันทึกและคำนวณนัดยิง
+            let current_shot = { score: score_val, x: clickX, y: clickY, arrow: "" };
+            let previous_shot = state.shots.length > 0 ? state.shots[state.shots.length - 1] : null;
+            current_shot.arrow = calculateArrow(current_shot, previous_shot);
+
+            state.shots.push(current_shot);
+            state.latest_score = score_val;
+            state.total_score = roundScore(state.total_score + score_val);
+
+            if (state.series_list[state.series_list.length - 1].length >= 5) {
+                state.series_list.push([]);
+            }
+            state.series_list[state.series_list.length - 1].push(current_shot);
+
+            // อัปเดตการแสดงผลหน้าเว็บ
+            document.getElementById('latestScore').innerText = state.latest_score.toFixed(1);
+            document.getElementById('totalScore').innerText = state.total_score.toFixed(1);
+            
+            drawTarget();
+            updateHistoryTable();
+        });
+
+        function roundScore(num) { return Math.round(num * 10) / 10; }
+
+        function resetSystem() {
+            state = { total_score: 0.0, latest_score: 0.0, shots: [], series_list: [[]] };
+            document.getElementById('latestScore').innerText = "0.0";
+            document.getElementById('totalScore').innerText = "0.0";
+            drawTarget();
+            updateHistoryTable();
+        }
+
+        // เรียกวาดเป้าเปล่าหน้าจอเริ่มต้น
+        drawTarget();
+    </script>
+</body>
+</html>
