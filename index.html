@@ -128,9 +128,14 @@
                 }
             }
 
+            // 🆕 ปรับระบบการวาดรูกระสุน: แสดงผลเฉพาะ 5 นัดล่าสุดเท่านั้น
             const shots = appState.shots;
             if (shots && shots.length > 0) {
-                for(let i = 0; i < shots.length - 1; i++) {
+                // หาตำแหน่งเริ่มต้นที่จะวาด (เอาแค่ 5 นัดท้ายสุดของอาเรย์)
+                const startIndex = Math.max(0, shots.length - 5);
+                
+                // วาดนัดก่อนหน้าในกลุ่ม 5 นัดล่าสุดให้เป็นสีเหลือง
+                for(let i = startIndex; i < shots.length - 1; i++) {
                     ctx.fillStyle = "rgba(241, 196, 15, 0.8)";
                     ctx.strokeStyle = "#b7950b";
                     ctx.lineWidth = 1;
@@ -139,6 +144,8 @@
                     ctx.fill();
                     ctx.stroke();
                 }
+                
+                // วาดนัดล่าสุด (นัดท้ายสุดจริง ๆ) ให้เป็นสีเขียวเสมอ
                 const latest = shots[shots.length - 1];
                 ctx.fillStyle = "rgba(46, 204, 113, 0.85)";
                 ctx.strokeStyle = "#27ae60";
@@ -150,23 +157,18 @@
             }
         }
 
-        // 🆕 ฟังก์ชันคำนวณคะแนนเวอร์ชันแก้ไข บล็อกบั๊ก 10.8 เรียบร้อย
         function calculateScoreAndArrow(x, y) {
             const distance = Math.sqrt(x*x + y*y);
-            
-            // ใช้การคำนวณแบบละเอียด ไม่ให้โดนบั๊ก Floating Point ของจาวาสคริปต์ตัดเศษ
             let score = 10.9 - (distance / 29.6);
             
-            // ขอบเขตระยะเผื่อ: ถ้ายิงห่างจากเซนเตอร์ไม่เกิน 2 พิกเซล (ประมาณ 0.16 มม.) ให้ถือว่าเป็นเซนเตอร์ 10.9 ชัดเจน
             if (distance <= 2.0) {
                 score = 10.9;
             } else {
-                // ปัดเศษทศนิยมตำแหน่งเดียวให้เที่ยงตรงด้วยวิธีคูณทศนิยมตามหลักคณิตศาสตร์
                 score = Math.round(score * 10) / 10;
             }
             
             if (score < 0) score = 0.0;
-            if (score > 10.9) score = 10.9; // กำหนดเพดานสูงสุดไว้ที่ 10.9
+            if (score > 10.9) score = 10.9;
             
             let arrow = "";
             if (distance > ringRaddi[8]) {
