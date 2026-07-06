@@ -3,17 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>10m Air Rifle Target - Strict Scale Demo</title>
+    <title>10m Air Rifle Target - 10.9 Score Fixed</title>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { margin: 0; padding: 0; background-color: #f7f9fa; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
         .app-container { display: flex; width: 100vw; height: 100vh; background-color: #ffffff; }
         
-        /* ฝั่งซ้าย: หน้าจอเป้าปืน */
         .left-panel { flex: 1.2; display: flex; justify-content: center; align-items: center; background-color: #ffffff; padding: 20px; position: relative; border-right: 2px solid #e1e8ed; }
         #targetCanvas { max-width: 90%; max-height: 90%; aspect-ratio: 1/1; background-color: #fff; cursor: crosshair; }
         
-        /* ฝั่งขวา: แผงคะแนน */
         .right-panel { flex: 0.8; display: flex; flex-direction: column; background-color: #ffffff; border-left: 1px solid #e1e8ed; }
         .score-section { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; border-bottom: 2px solid #e1e8ed; padding: 15px; position: relative; }
         .score-title { font-size: 28px; font-weight: 800; color: #1c2434; margin: 0; text-transform: uppercase; letter-spacing: 1px; }
@@ -52,7 +50,7 @@
             </div>
             
             <div class="total-section">
-                <div class="avg-display" id="avgScore">AVG: 0.00</div>
+                <div class="avg-display" id="avgScore">AVG: 0.0</div>
                 <h2 class="total-title">Total Score</h2>
                 <div class="total-display" id="totalScore">0.0</div>
             </div>
@@ -75,10 +73,8 @@
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
 
-        // 📐 รัศมีวงแหวนคำนวณใหม่ตามมาตรฐาน ISSF (1 มม. = 11.86 พิกเซล)
-        // วง 1 ถึง วง 10 จุดตัดระยะจะห่างกันวงละ 2.5 มม. (ยกเว้นวง 10 ที่เหลือ 0.25 มม. สำหรับจุดศูนย์กลาง)
         const ringRaddi = [270, 240, 211, 181, 151, 122, 92, 62, 33, 3]; 
-        const ringLabels = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        const ringLabels = ["1", "2", "3", "4", "5", "6", "7", "8"];
 
         let appState = {
             total_score: 0.0,
@@ -90,37 +86,41 @@
         function drawTarget() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // วาดพื้นหลังวงขาวนอก (วง 1-3)
             ctx.fillStyle = "#ffffff";
             ctx.beginPath();
             ctx.arc(centerX, centerY, ringRaddi[0], 0, 2 * Math.PI);
             ctx.fill();
             
-            // วาดพื้นที่สีดำเริ่มที่วงแต้ม 4 เข้าไปตามคำขอ
             ctx.fillStyle = "#111111";
             ctx.beginPath();
             ctx.arc(centerX, centerY, ringRaddi[3], 0, 2 * Math.PI);
             ctx.fill();
 
-            ctx.lineWidth = 1;
             for(let i=0; i<ringRaddi.length; i++) {
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, ringRaddi[i], 0, 2 * Math.PI);
                 
                 if (i >= 3) {
-                    ctx.strokeStyle = "rgba(255,255,255,0.4)"; // เส้นในวงดำให้จางลงเล็กน้อยเพื่อความสบายตา
+                    if (i === 9) {
+                        ctx.strokeStyle = "#ffffff"; 
+                        ctx.lineWidth = 1.5;
+                    } else {
+                        ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+                        ctx.lineWidth = 1;
+                    }
                     ctx.fillStyle = "#ffffff";
                 } else {
                     ctx.strokeStyle = "#404040";
                     ctx.fillStyle = "#7f8c8d";
+                    ctx.lineWidth = 1;
                 }
                 ctx.stroke();
                 
-                // วาดตัวเลขคะแนนกำกับ (เว้นวง 9 และ 10 ด้านในสุดเพราะพื้นที่เล็กเกินไป)
-                if (i < 8) {
+                if (i < ringLabels.length) {
                     ctx.font = "bold 11px sans-serif";
                     ctx.textAlign = "center";
                     ctx.textBaseline = "middle";
+                    
                     ctx.fillText(ringLabels[i], centerX, centerY - ringRaddi[i] + 10);
                     ctx.fillText(ringLabels[i], centerX, centerY + ringRaddi[i] - 10);
                     ctx.fillText(ringLabels[i], centerX - ringRaddi[i] + 10, centerY);
@@ -128,7 +128,6 @@
                 }
             }
 
-            // รูกระสุนขนาด .177 นิ้ว (รัศมีปรับลงเหลือ 27 พิกเซล ให้สมดุลกับสเกลใหม่)
             const shots = appState.shots;
             if (shots && shots.length > 0) {
                 for(let i = 0; i < shots.length - 1; i++) {
@@ -151,14 +150,23 @@
             }
         }
 
+        // 🆕 ฟังก์ชันคำนวณคะแนนเวอร์ชันแก้ไข บล็อกบั๊ก 10.8 เรียบร้อย
         function calculateScoreAndArrow(x, y) {
             const distance = Math.sqrt(x*x + y*y);
             
-            // ปรับสูตรคำนวณคะแนนทศนิยมให้เข้ากับสเกล 1 มม. = 11.86 พิกเซล
-            // วง 10 มีรัศมี 3 พิกเซล ยิงโดนกลางเป้าพอดีจะได้ 10.9 และจะค่อยๆ ลดลงตามระยะทางจริง
+            // ใช้การคำนวณแบบละเอียด ไม่ให้โดนบั๊ก Floating Point ของจาวาสคริปต์ตัดเศษ
             let score = 10.9 - (distance / 29.6);
+            
+            // ขอบเขตระยะเผื่อ: ถ้ายิงห่างจากเซนเตอร์ไม่เกิน 2 พิกเซล (ประมาณ 0.16 มม.) ให้ถือว่าเป็นเซนเตอร์ 10.9 ชัดเจน
+            if (distance <= 2.0) {
+                score = 10.9;
+            } else {
+                // ปัดเศษทศนิยมตำแหน่งเดียวให้เที่ยงตรงด้วยวิธีคูณทศนิยมตามหลักคณิตศาสตร์
+                score = Math.round(score * 10) / 10;
+            }
+            
             if (score < 0) score = 0.0;
-            score = Math.round(score * 10) / 10;
+            if (score > 10.9) score = 10.9; // กำหนดเพดานสูงสุดไว้ที่ 10.9
             
             let arrow = "";
             if (distance > ringRaddi[8]) {
@@ -203,9 +211,9 @@
             const avgDisplay = document.getElementById('avgScore');
             if (totalShots > 0) {
                 let avg = appState.total_score / totalShots;
-                avgDisplay.innerText = `AVG: ${avg.toFixed(2)}`;
+                avgDisplay.innerText = `AVG: ${avg.toFixed(1)}`;
             } else {
-                avgDisplay.innerText = "AVG: 0.00";
+                avgDisplay.innerText = "AVG: 0.0";
             }
 
             drawTarget();
